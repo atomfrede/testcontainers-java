@@ -229,7 +229,7 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
 
             containerId = createCommand.exec().getId();
 
-            connectToPortForwardingNetwork(createCommand.getNetworkMode());
+            connectToPortForwardingNetwork(createCommand.getHostConfig().getNetworkMode());
 
             copyToFileContainerPathMap.forEach(this::copyFileToContainer);
 
@@ -281,6 +281,7 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
     /**
      * Set any custom settings for the create command such as shared memory size.
      */
+    @NotNull
     private HostConfig buildHostConfig() {
         HostConfig config = new HostConfig();
         if (shmSize != null) {
@@ -423,7 +424,7 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
                 .map(PortBinding::parse)
                 .toArray(PortBinding[]::new);
 
-        createCommand.withPortBindings(portBindingArray);
+        hostConfig.withPortBindings(portBindingArray);
 
         if (commandParts != null) {
             createCommand.withCmd(commandParts);
@@ -445,13 +446,11 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
             }
         }
 
-        Bind[] bindsArray = binds.stream()
-                .toArray(Bind[]::new);
-        createCommand.withBinds(bindsArray);
+        Bind[] bindsArray = binds.toArray(new Bind[0]);
+        hostConfig.withBinds(bindsArray);
 
-        VolumesFrom[] volumesFromsArray = volumesFroms.stream()
-                .toArray(VolumesFrom[]::new);
-        createCommand.withVolumesFrom(volumesFromsArray);
+        VolumesFrom[] volumesFromsArray = volumesFroms.toArray(new VolumesFrom[0]);
+        hostConfig.withVolumesFrom(volumesFromsArray);
 
         Set<Link> allLinks = new HashSet<>();
         Set<String> allLinkedContainerNetworks = new HashSet<>();
@@ -473,7 +472,7 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
             allLinkedContainerNetworks.addAll(linkedContainerNetworks);
         }
 
-        createCommand.withLinks(allLinks.toArray(new Link[allLinks.size()]));
+        hostConfig.withLinks(allLinks.toArray(new Link[0]));
 
         allLinkedContainerNetworks.remove("bridge");
         if (allLinkedContainerNetworks.size() > 1) {
@@ -485,24 +484,23 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
         Optional<String> networkForLinks = allLinkedContainerNetworks.stream().findFirst();
         if (networkForLinks.isPresent()) {
             logger().debug("Associating container with network: {}", networkForLinks.get());
-            createCommand.withNetworkMode(networkForLinks.get());
+            hostConfig.withNetworkMode(networkForLinks.get());
         }
 
-        createCommand.withPublishAllPorts(true);
+        hostConfig.withPublishAllPorts(true);
 
         PortForwardingContainer.INSTANCE.getNetwork().ifPresent(it -> {
             withExtraHost(INTERNAL_HOST_HOSTNAME, it.getIpAddress());
         });
 
-        String[] extraHostsArray = extraHosts.stream()
-                .toArray(String[]::new);
-        createCommand.withExtraHosts(extraHostsArray);
+        String[] extraHostsArray = extraHosts.toArray(new String[0]);
+        hostConfig.withExtraHosts(extraHostsArray);
 
         if (network != null) {
-            createCommand.withNetworkMode(network.getId());
+            hostConfig.withNetworkMode(network.getId());
             createCommand.withAliases(this.networkAliases);
         } else if (networkMode != null) {
-            createCommand.withNetworkMode(networkMode);
+            hostConfig.withNetworkMode(networkMode);
         }
 
         if (workingDirectory != null) {
@@ -510,13 +508,12 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
         }
 
         if (privilegedMode) {
-            createCommand.withPrivileged(privilegedMode);
+            hostConfig.withPrivileged(privilegedMode);
         }
 
         createContainerCmdModifiers.forEach(hook -> hook.accept(createCommand));
 
-        Map<String, String> combinedLabels = new HashMap<>();
-        combinedLabels.putAll(labels);
+        Map<String, String> combinedLabels = new HashMap<>(labels);
         if (createCommand.getLabels() != null) {
             combinedLabels.putAll(createCommand.getLabels());
         }
@@ -541,7 +538,6 @@ public class GenericContainer<SELF extends GenericContainer<SELF>>
                 .filter(container -> container.getNetworkSettings() != null &&
                         container.getNetworkSettings().getNetworks() != null)
                 .flatMap(container -> container.getNetworkSettings().getNetworks().keySet().stream())
-                .distinct()
                 .collect(Collectors.toSet());
     }
 
